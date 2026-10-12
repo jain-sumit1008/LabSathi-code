@@ -8,8 +8,8 @@ import {
 import Editor from '@monaco-editor/react';
 import io from 'socket.io-client';
 
-// CHANGE THIS TO YOUR LAPTOP'S IPv4 ADDRESS (e.g. 'http://192.168.1.15:5000')
-const LAPTOP_IP = 'http://192.168.1.15:5000';
+// YOUR EXACT LAPTOP IPv4 ADDRESS
+const LAPTOP_IP = 'http://192.168.29.127:5000';
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
   ? 'http://localhost:5000'
@@ -17,7 +17,8 @@ const BACKEND_URL = (typeof window !== 'undefined' && window.location.hostname =
 
 const socket = io(BACKEND_URL, {
   transports: ['websocket', 'polling'],
-  reconnectionAttempts: 5
+  reconnectionAttempts: 10,
+  timeout: 10000
 });
 
 const TEMPLATES = {
@@ -375,7 +376,7 @@ export default function App() {
         <div className="h-9 bg-[#0f121a] flex justify-between items-center px-4 lg:px-6 text-xs text-neutral-400 border-b border-neutral-800 shrink-0">
           <span className="font-semibold text-neutral-300 truncate">LabSathi • SVVV Indore</span>
           <div className="flex items-center space-x-3 text-[11px]">
-            <span className={isConnected ? "text-emerald-400" : "text-amber-400 font-semibold"}>
+            <span className={isConnected ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
               ● {isConnected ? "Connected to Lab Network" : "Connecting to Lab..."}
             </span>
             <span className="hidden sm:inline">📶 88%</span>
@@ -465,7 +466,7 @@ export default function App() {
 
           {/* TAB 2: LIVE LECTURES */}
           {activeTab === 'lectures' && (
-            <div className="flex flex-col lg:flex-row h-full p-3 lg:p-4 gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto lg:overflow-hidden">
+            <div className="flex flex-col lg:flex-row h-full p-3 lg:p-4 gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto pb-20 lg:pb-4">
               
               {/* Left Column: Course Modules */}
               <div className="w-full lg:w-[320px] bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
@@ -631,11 +632,11 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3: QUIZ & ASSESSMENT */}
+          {/* TAB 3: QUIZ & ASSESSMENT (Scrollable & Fully Visible Options) */}
           {activeTab === 'quiz' && (
-            <div className="h-full p-3 lg:p-4 flex flex-col lg:flex-row gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto lg:overflow-hidden">
+            <div className="h-full p-3 lg:p-4 flex flex-col lg:flex-row gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto pb-24 lg:pb-4">
               
-              {/* Left Summary Box */}
+              {/* Left/Top Summary Box */}
               <div className="w-full lg:w-64 bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
                 <div>
                   <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-2">
@@ -653,8 +654,8 @@ export default function App() {
                     <span className="text-white font-semibold">{answeredCount} of {QUIZ_QUESTIONS.length} Answered</span>
                   </div>
 
-                  {/* Question Indicator Numbers */}
-                  <div className="grid grid-cols-5 gap-2 mb-4">
+                  {/* Question Selector Numbers */}
+                  <div className="grid grid-cols-5 gap-2 mb-3">
                     {QUIZ_QUESTIONS.map((q, idx) => {
                       const isAnswered = quizAnswers[idx] !== undefined;
                       const isCurrent = currentQIndex === idx;
@@ -675,84 +676,72 @@ export default function App() {
                       );
                     })}
                   </div>
-
-                  <div className="p-3 bg-[#10141d] rounded-xl border border-neutral-800/80 space-y-1.5 text-[11px]">
-                    <div className="flex items-center justify-between text-neutral-400">
-                      <span>Per Question:</span>
-                      <span className="text-white font-medium">+5 Marks</span>
-                    </div>
-                    <div className="flex items-center justify-between text-neutral-400">
-                      <span>Negative Marking:</span>
-                      <span className="text-emerald-400 font-medium">None (0)</span>
-                    </div>
-                  </div>
                 </div>
 
                 {!quizSubmitted ? (
                   <button
                     onClick={() => setQuizSubmitted(true)}
-                    className="w-full mt-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-1.5"
+                    className="w-full mt-2 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-1.5 shrink-0"
                   >
                     <CheckCircle size={14} /> Submit Assessment
                   </button>
                 ) : (
                   <button
                     onClick={resetQuiz}
-                    className="w-full mt-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                    className="w-full mt-2 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shrink-0"
                   >
                     <RotateCcw size={14} /> Retake Assessment
                   </button>
                 )}
               </div>
 
-              {/* Right Question Box or Detailed Result */}
-              <div className="flex-1 bg-[#141822] rounded-2xl p-4 lg:p-5 border border-neutral-800 flex flex-col justify-between overflow-hidden">
+              {/* Right Question Box */}
+              <div className="flex-1 bg-[#141822] rounded-2xl p-4 lg:p-5 border border-neutral-800 flex flex-col justify-between shrink-0">
                 {!quizSubmitted ? (
-                  <>
-                    <div>
-                      <div className="flex justify-between items-center mb-3 border-b border-neutral-800 pb-2.5">
-                        <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/40 text-xs font-mono font-bold">
-                          Question {currentQIndex + 1} of {QUIZ_QUESTIONS.length}
-                        </span>
-                        <span className="text-[11px] text-neutral-400 font-mono">
-                          {quizAnswers[currentQIndex] !== undefined ? '● Saved' : '○ Not Attempted'}
-                        </span>
-                      </div>
-
-                      <h2 className="text-sm font-semibold text-neutral-200 mb-3">{currentQ.question}</h2>
-
-                      {currentQ.code && (
-                        <pre className="bg-[#0b0e14] p-3 rounded-xl font-mono text-xs text-emerald-400 border border-neutral-800/80 mb-3 whitespace-pre overflow-x-auto">
-                          {currentQ.code}
-                        </pre>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {currentQ.options.map((opt, i) => {
-                          const isSelected = quizAnswers[currentQIndex] === i;
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => setQuizAnswers({ ...quizAnswers, [currentQIndex]: i })}
-                              className={`p-3 rounded-xl border text-left text-xs transition flex items-center gap-2.5 ${
-                                isSelected
-                                  ? 'border-cyan-400 bg-cyan-950/40 text-cyan-200 font-semibold'
-                                  : 'border-neutral-800 bg-[#10141d] hover:bg-neutral-800/70 text-neutral-300'
-                              }`}
-                            >
-                              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold ${
-                                isSelected ? 'bg-cyan-500 text-black' : 'bg-neutral-800 text-neutral-400'
-                              }`}>
-                                {String.fromCharCode(65 + i)}
-                              </span>
-                              <span className="flex-1">{opt}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center border-b border-neutral-800 pb-2.5">
+                      <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/40 text-xs font-mono font-bold">
+                        Question {currentQIndex + 1} of {QUIZ_QUESTIONS.length}
+                      </span>
+                      <span className="text-[11px] text-neutral-400 font-mono">
+                        {quizAnswers[currentQIndex] !== undefined ? '● Saved' : '○ Not Attempted'}
+                      </span>
                     </div>
 
-                    <div className="flex justify-between items-center pt-3 border-t border-neutral-800 mt-3">
+                    <h2 className="text-sm font-semibold text-neutral-200">{currentQ.question}</h2>
+
+                    {currentQ.code && (
+                      <pre className="bg-[#0b0e14] p-3 rounded-xl font-mono text-xs text-emerald-400 border border-neutral-800/80 whitespace-pre overflow-x-auto">
+                        {currentQ.code}
+                      </pre>
+                    )}
+
+                    {/* All 4 Options Visible & Clickable */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                      {currentQ.options.map((opt, i) => {
+                        const isSelected = quizAnswers[currentQIndex] === i;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => setQuizAnswers({ ...quizAnswers, [currentQIndex]: i })}
+                            className={`p-3 rounded-xl border text-left text-xs transition flex items-center gap-2.5 ${
+                              isSelected
+                                ? 'border-cyan-400 bg-cyan-950/40 text-cyan-200 font-semibold'
+                                : 'border-neutral-800 bg-[#10141d] hover:bg-neutral-800/70 text-neutral-300'
+                            }`}
+                          >
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold shrink-0 ${
+                              isSelected ? 'bg-cyan-500 text-black' : 'bg-neutral-800 text-neutral-400'
+                            }`}>
+                              {String.fromCharCode(65 + i)}
+                            </span>
+                            <span className="flex-1 break-words">{opt}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex justify-between items-center pt-3 border-t border-neutral-800 mt-2">
                       <button
                         onClick={() => setCurrentQIndex((prev) => Math.max(0, prev - 1))}
                         disabled={currentQIndex === 0}
@@ -768,9 +757,9 @@ export default function App() {
                         Next <ChevronRight size={14} />
                       </button>
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <div className="flex flex-col sm:flex-row h-full gap-4 overflow-y-auto">
+                  <div className="flex flex-col sm:flex-row h-full gap-4">
                     <div className="w-full sm:w-48 bg-[#10141d] rounded-xl p-4 border border-neutral-800 text-center flex flex-col justify-center shrink-0">
                       <CheckCircle size={32} className="text-emerald-400 mx-auto mb-1.5" />
                       <h4 className="text-xs font-bold text-neutral-300">Total Score</h4>
@@ -778,7 +767,7 @@ export default function App() {
                       <p className="text-xs font-bold text-emerald-400">PASSED</p>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[350px]">
                       {QUIZ_QUESTIONS.map((q, idx) => {
                         const userAns = quizAnswers[idx];
                         const isCorrect = userAns === q.correctIndex;
@@ -809,7 +798,7 @@ export default function App() {
 
           {/* TAB 4: CHAT & FACULTY DESK */}
           {activeTab === 'chat' && (
-            <div className="flex flex-col sm:flex-row h-full bg-[#0f121a] overflow-hidden">
+            <div className="flex flex-col sm:flex-row h-full bg-[#0f121a] overflow-hidden pb-16 lg:pb-0">
               
               {/* Channel List Sidebar */}
               <div className="w-full sm:w-56 bg-[#141822] border-b sm:border-b-0 sm:border-r border-neutral-800 p-2.5 flex flex-row sm:flex-col justify-between text-xs shrink-0 overflow-x-auto sm:overflow-visible">
@@ -915,7 +904,7 @@ export default function App() {
 
           {/* TAB 5: PROFESSIONAL PROFILE & PRACTICAL LOG */}
           {activeTab === 'profile' && (
-            <div className="p-3 lg:p-5 h-full flex flex-col justify-between bg-[#0d1017] gap-3 overflow-y-auto lg:overflow-hidden">
+            <div className="p-3 lg:p-5 h-full flex flex-col justify-between bg-[#0d1017] gap-3 overflow-y-auto pb-24 lg:pb-4">
               
               <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 flex-1">
                 

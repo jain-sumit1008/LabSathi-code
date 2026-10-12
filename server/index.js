@@ -9,6 +9,9 @@ import axios from 'axios';
 import { GoogleGenAI } from '@google/genai';
 
 const app = express();
+app.get('/', (req, res) => {
+  res.send('🚀 SVVV Lab Backend is active and running!');
+});
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
@@ -332,5 +335,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 SVVV Lab Backend is active and running on http://0.0.0.0:${PORT}`);
+  console.log(`🚀 SVVV Lab Backend is active on http://0.0.0.0:${PORT}`);
 });
