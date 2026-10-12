@@ -8,17 +8,15 @@ import {
 import Editor from '@monaco-editor/react';
 import io from 'socket.io-client';
 
-// YOUR EXACT LAPTOP IPv4 ADDRESS
-const LAPTOP_IP = 'http://192.168.29.127:5000';
-
-const BACKEND_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-  ? 'http://localhost:5000'
-  : LAPTOP_IP;
+// YOUR EXACT LAPTOP IPv4 ADDRESS (Directly used without broken localhost check)
+const BACKEND_URL = 'http://192.168.29.127:5000';
 
 const socket = io(BACKEND_URL, {
-  transports: ['websocket', 'polling'],
-  reconnectionAttempts: 10,
-  timeout: 10000
+  transports: ['polling', 'websocket'],
+  reconnection: true,
+  reconnectionAttempts: 20,
+  reconnectionDelay: 1000,
+  timeout: 20000
 });
 
 const TEMPLATES = {
@@ -369,7 +367,7 @@ export default function App() {
   return (
     <div className="w-full h-screen bg-neutral-950 font-sans flex items-center justify-center p-0 lg:p-4 overflow-hidden select-none">
       
-      {/* DESKTOP + MOBILE UNIVERSAL WRAPPER */}
+      {/* UNIVERSAL DESKTOP + MOBILE CONTAINER */}
       <div className="w-full h-full lg:max-w-6xl lg:h-[620px] bg-[#12161f] lg:border-4 lg:border-neutral-800 lg:rounded-3xl flex flex-col overflow-hidden shadow-2xl relative text-white">
         
         {/* TOP STATUS BAR */}
@@ -383,7 +381,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* MAIN MULTI-TAB DISPLAY AREA */}
+        {/* MAIN DISPLAY VIEW */}
         <div className="flex-1 overflow-hidden relative">
 
           {/* TAB 1: CODE STUDIO */}
@@ -391,7 +389,7 @@ export default function App() {
             <div className="flex flex-col lg:flex-row h-full overflow-hidden">
               
               {/* Code Editor Panel */}
-              <div className="flex-1 flex flex-col h-[60%] lg:h-full border-b lg:border-b-0 lg:border-r border-neutral-800">
+              <div className="flex-1 flex flex-col h-[58%] lg:h-full border-b lg:border-b-0 lg:border-r border-neutral-800">
                 <div className="h-10 bg-[#161a23] flex items-center justify-between px-3 border-b border-neutral-800 shrink-0">
                   <select 
                     value={language} 
@@ -432,7 +430,7 @@ export default function App() {
               </div>
 
               {/* Terminal Output Panel */}
-              <div className="h-[40%] lg:h-full w-full lg:w-80 bg-[#0d1017] flex flex-col font-mono text-xs border-t lg:border-t-0 lg:border-l border-neutral-800">
+              <div className="h-[42%] lg:h-full w-full lg:w-80 bg-[#0d1017] flex flex-col font-mono text-xs border-t lg:border-t-0 lg:border-l border-neutral-800">
                 <div className="h-9 bg-[#10141d] px-3 flex items-center justify-between text-neutral-400 border-b border-neutral-800 shrink-0">
                   <span className="font-bold text-[11px] tracking-wider">TERMINAL OUTPUT</span>
                   <button onClick={() => setTerminalOutput('')} className="text-neutral-500 hover:text-white transition">Clear</button>
@@ -468,7 +466,6 @@ export default function App() {
           {activeTab === 'lectures' && (
             <div className="flex flex-col lg:flex-row h-full p-3 lg:p-4 gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto pb-20 lg:pb-4">
               
-              {/* Left Column: Course Modules */}
               <div className="w-full lg:w-[320px] bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
                 <div>
                   <div className="flex justify-between items-start mb-2">
@@ -528,7 +525,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Center Column: Video Stream */}
               <div className="flex-1 flex flex-col gap-3 min-h-[240px] shrink-0">
                 <div className="flex-1 aspect-video lg:aspect-auto bg-black rounded-2xl overflow-hidden border border-neutral-800 relative shadow-inner">
                   {activeLecture ? (
@@ -561,7 +557,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Right Column: Notes & Deletable To-Do */}
               <div className="w-full lg:w-[280px] bg-[#141822] rounded-2xl p-3.5 border border-neutral-800 flex flex-col justify-between shrink-0">
                 <div className="flex flex-col mb-3">
                   <span className="text-xs font-bold text-neutral-300 mb-1 flex items-center justify-between">
@@ -636,7 +631,6 @@ export default function App() {
           {activeTab === 'quiz' && (
             <div className="h-full p-3 lg:p-4 flex flex-col lg:flex-row gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto pb-24 lg:pb-4">
               
-              {/* Left/Top Summary Box */}
               <div className="w-full lg:w-64 bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
                 <div>
                   <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-2">
@@ -654,7 +648,6 @@ export default function App() {
                     <span className="text-white font-semibold">{answeredCount} of {QUIZ_QUESTIONS.length} Answered</span>
                   </div>
 
-                  {/* Question Selector Numbers */}
                   <div className="grid grid-cols-5 gap-2 mb-3">
                     {QUIZ_QUESTIONS.map((q, idx) => {
                       const isAnswered = quizAnswers[idx] !== undefined;
@@ -695,7 +688,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Right Question Box */}
               <div className="flex-1 bg-[#141822] rounded-2xl p-4 lg:p-5 border border-neutral-800 flex flex-col justify-between shrink-0">
                 {!quizSubmitted ? (
                   <div className="space-y-3">
@@ -716,7 +708,6 @@ export default function App() {
                       </pre>
                     )}
 
-                    {/* All 4 Options Visible & Clickable */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                       {currentQ.options.map((opt, i) => {
                         const isSelected = quizAnswers[currentQIndex] === i;
@@ -800,7 +791,6 @@ export default function App() {
           {activeTab === 'chat' && (
             <div className="flex flex-col sm:flex-row h-full bg-[#0f121a] overflow-hidden pb-16 lg:pb-0">
               
-              {/* Channel List Sidebar */}
               <div className="w-full sm:w-56 bg-[#141822] border-b sm:border-b-0 sm:border-r border-neutral-800 p-2.5 flex flex-row sm:flex-col justify-between text-xs shrink-0 overflow-x-auto sm:overflow-visible">
                 <div className="flex sm:flex-col gap-1 w-full">
                   <span className="hidden sm:block text-[10px] tracking-wider text-neutral-500 font-bold uppercase mb-1">
@@ -832,7 +822,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Chat Message Stream */}
               <div className="flex-1 flex flex-col justify-between h-full overflow-hidden">
                 <div className="h-9 bg-[#141822] px-4 flex items-center justify-between border-b border-neutral-800 text-xs shrink-0">
                   <span className="font-bold text-white flex items-center gap-1.5">
@@ -908,7 +897,6 @@ export default function App() {
               
               <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 flex-1">
                 
-                {/* Left Card: Student Info */}
                 <div className="w-full lg:w-[340px] bg-[#141822] p-4 rounded-2xl border border-neutral-800 flex flex-col justify-between shrink-0">
                   <div>
                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-neutral-800">
@@ -1006,7 +994,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Right Card: Lab Analytics & Practical Record */}
                 <div className="flex-1 bg-[#141822] p-4 rounded-2xl border border-neutral-800 flex flex-col justify-between shrink-0">
                   <div>
                     <div className="grid grid-cols-3 gap-2.5 mb-3">
@@ -1068,7 +1055,6 @@ export default function App() {
 
               </div>
 
-              {/* PDF Download Button */}
               <button 
                 onClick={() => alert(`Practical record compiled for ${profileData.name} (${profileData.enrollment})!`)}
                 className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg transition flex items-center justify-center gap-2 shrink-0"

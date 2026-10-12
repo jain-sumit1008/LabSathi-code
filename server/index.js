@@ -9,13 +9,20 @@ import axios from 'axios';
 import { GoogleGenAI } from '@google/genai';
 
 const app = express();
-app.get('/', (req, res) => {
-  res.send('🚀 SVVV Lab Backend is active and running!');
-});
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
 
-app.use(cors());
+const server = http.createServer(app);
+
+// Permissive CORS configuration specifically supporting mobile WebView & Socket.io 4.x
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  allowEIO3: true
+});
+
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Initialize Gemini Client if key exists
@@ -35,16 +42,16 @@ let courseData = {
       id: "mod_1",
       title: "Module 1: Process Management & System Calls",
       lectures: [
-        { id: "lec_101", title: "1.1 Introduction to OS & Kernel Archite...", duration: "14m", videoUrl: "https://www.youtube.com/embed/26QPDBe-NB8", isCompleted: true },
-        { id: "lec_102", title: "1.2 Process Creation with fork() & exec(...)", duration: "22m", videoUrl: "https://www.youtube.com/embed/xVSPv-9x3gk", isCompleted: true },
-        { id: "lec_103", title: "1.3 Zombie & Orphan Processes Explai...", duration: "18m", videoUrl: "https://www.youtube.com/embed/94URLRNv3VU", isCompleted: false }
+        { id: "lec_101", title: "1.1 Introduction to OS & Kernel Architecture", duration: "14m", videoUrl: "https://www.youtube.com/embed/26QPDBe-NB8", isCompleted: true },
+        { id: "lec_102", title: "1.2 Process Creation with fork() & exec()", duration: "22m", videoUrl: "https://www.youtube.com/embed/xVSPv-9x3gk", isCompleted: true },
+        { id: "lec_103", title: "1.3 Zombie & Orphan Processes Explained", duration: "18m", videoUrl: "https://www.youtube.com/embed/94URLRNv3VU", isCompleted: false }
       ]
     },
     {
       id: "mod_2",
       title: "Module 2: CPU Scheduling & Synchronization",
       lectures: [
-        { id: "lec_201", title: "2.1 FCFS & Round Robin Scheduling Al...", duration: "25m", videoUrl: "https://www.youtube.com/embed/EWkqlL11kQ8", isCompleted: false },
+        { id: "lec_201", title: "2.1 FCFS & Round Robin Scheduling Algorithms", duration: "25m", videoUrl: "https://www.youtube.com/embed/EWkqlL11kQ8", isCompleted: false },
         { id: "lec_202", title: "2.2 Mutex Locks and Semaphores in Java", duration: "28m", videoUrl: "https://www.youtube.com/embed/gXgK5Qn_n6E", isCompleted: false }
       ]
     }
@@ -185,6 +192,8 @@ async function executeRemoteCpp(code, stdinInput) {
 const activeProcesses = new Map();
 
 io.on('connection', (socket) => {
+  console.log(`[Socket Connected] Client ID: ${socket.id}`);
+
   socket.on('join_lab', (room) => socket.join(room));
 
   socket.on('send_chat_message', (data) => {
@@ -207,6 +216,7 @@ io.on('connection', (socket) => {
 
   // START INTERACTIVE CODE EXECUTION
   socket.on('start_interactive_run', ({ language, code }) => {
+    console.log(`[Run Request] Executing ${language}`);
     if (activeProcesses.has(socket.id)) {
       activeProcesses.get(socket.id).kill();
       activeProcesses.delete(socket.id);
@@ -234,7 +244,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    // 2. C++ (Local compiler auto-detection with automatic online sandbox fallback)
+    // 2. C++
     else if (language === 'cpp') {
       const srcPath = path.join(tempDir, `code_${timestamp}.cpp`);
       const binPath = path.join(tempDir, `code_${timestamp}.exe`);
@@ -251,10 +261,9 @@ io.on('connection', (socket) => {
       comp.on('close', async (status) => {
         if (fs.existsSync(srcPath)) fs.unlinkSync(srcPath);
 
-        // If local g++ is missing or failed to compile
         if (status !== 0) {
           if (compErr.includes('not recognized') || compilerCmd === 'g++') {
-            socket.emit('terminal_data', 'Local g++ compiler not found in PATH. Routing to online compiler engine...\n');
+            socket.emit('terminal_data', 'Routing to online compiler engine...\n');
             try {
               const remoteOutput = await executeRemoteCpp(code, '');
               socket.emit('terminal_data', remoteOutput);
@@ -269,7 +278,6 @@ io.on('connection', (socket) => {
           return;
         }
 
-        // Local execution
         const child = spawn(`"${binPath}"`, [], { shell: true });
         activeProcesses.set(socket.id, child);
 
@@ -326,6 +334,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    console.log(`[Socket Disconnected] Client ID: ${socket.id}`);
     if (activeProcesses.has(socket.id)) {
       activeProcesses.get(socket.id).kill();
       activeProcesses.delete(socket.id);
