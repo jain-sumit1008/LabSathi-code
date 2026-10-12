@@ -36,10 +36,10 @@ int main() {
     return 0;
 }
 `,
-  java: `// Java 21
-public class Main {
+  java: `// Java 21 (OpenJDK)
+class Main {
     public static void main(String[] args) {
-        System.out.println("Hello World! Java execution successful on SVVV Lab.");
+        System.out.println("Hello World! Java 21 execution successful on SVVV Lab.");
     }
 }
 `
@@ -216,8 +216,7 @@ export default function App() {
       setIsConnected(true);
     });
 
-    socket.on('connect_error', (err) => {
-      console.log('Socket connect error:', err.message);
+    socket.on('connect_error', () => {
       setIsConnected(false);
     });
 
@@ -267,34 +266,78 @@ export default function App() {
     setIsRunning(true);
     setTerminalOutput(`Executing ${language.toUpperCase()}...\n`);
 
-    // 1. Primary: If connected to laptop, execute through laptop backend
+    // 1. Primary route: Connect to laptop if socket is active
     if (socket.connected) {
       socket.emit('start_interactive_run', { language, code });
       return;
     }
 
-    // 2. Fallback: Direct Mobile Online Compiler (Never fails in front of judges)
-    setTerminalOutput(prev => prev + "Laptop offline or network changed. Routing through LabSathi Cloud Engine...\n");
+    // 2. High-reliability Cloud Runner: Piston Engine API
+    setTerminalOutput((prev) => prev + "Laptop offline or network changed. Routing through LabSathi Cloud Engine...\n");
     try {
-      let compilerName = 'cpython-3.10.8';
-      if (language === 'cpp') compilerName = 'gcc-head';
-      if (language === 'java') compilerName = 'openjdk-jdk-21+35';
+      let pistonLang = 'python';
+      let pistonVersion = '3.10.0';
 
-      const res = await fetch('https://wandbox.org/api/compile.json', {
+      if (language === 'cpp') {
+        pistonLang = 'cpp';
+        pistonVersion = '10.2.0';
+      } else if (language === 'java') {
+        pistonLang = 'java';
+        pistonVersion = '15.0.2';
+      }
+
+      // Safe sanitization for Java class declaration
+      let cleanCode = code;
+      if (language === 'java') {
+        cleanCode = cleanCode.replace(/public\s+class\s+Main/, 'class Main');
+      }
+
+      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          compiler: compilerName,
-          code: code,
+          language: pistonLang,
+          version: pistonVersion,
+          files: [{ content: cleanCode }],
           stdin: terminalInputVal || ''
         })
       });
 
       const data = await res.json();
-      const output = data.program_output || data.compiler_error || data.program_error || 'Execution finished without output.';
-      setTerminalOutput(prev => prev + output + '\n[Process completed]\n');
+      if (data.run) {
+        const out = data.run.stdout || data.run.stderr || data.run.output || 'Execution completed without output.';
+        setTerminalOutput((prev) => prev + out + '\n[Process completed]\n');
+      } else if (data.compile && data.compile.stderr) {
+        setTerminalOutput((prev) => prev + `Compilation Error:\n${data.compile.stderr}\n[Compilation failed]\n`);
+      } else {
+        setTerminalOutput((prev) => prev + (data.message || 'Error executing program') + '\n');
+      }
     } catch (err) {
-      setTerminalOutput(prev => prev + `Error running code: ${err.message}\nPlease check Wi-Fi connection.\n`);
+      // 3. Wandbox secondary fallback
+      try {
+        let wbCompiler = 'cpython-head';
+        if (language === 'cpp') wbCompiler = 'gcc-head';
+        if (language === 'java') wbCompiler = 'openjdk-jdk-21+35';
+
+        let wbCode = code;
+        if (language === 'java') wbCode = wbCode.replace(/public\s+class\s+Main/, 'class Main');
+
+        const wbRes = await fetch('https://wandbox.org/api/compile.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            compiler: wbCompiler,
+            code: wbCode,
+            stdin: terminalInputVal || ''
+          })
+        });
+
+        const wbData = await wbRes.json();
+        const output = wbData.program_output || wbData.compiler_error || wbData.program_error || 'Execution finished.';
+        setTerminalOutput((prev) => prev + output + '\n[Process completed]\n');
+      } catch (innerErr) {
+        setTerminalOutput((prev) => prev + `Execution Error: ${err.message}\nPlease verify internet connectivity.\n`);
+      }
     } finally {
       setIsRunning(false);
     }
@@ -321,7 +364,7 @@ export default function App() {
       time: currentTime
     };
 
-    setChannelMessages(prev => ({
+    setChannelMessages((prev) => ({
       ...prev,
       [targetChannel]: [...(prev[targetChannel] || []), sharedMsg]
     }));
@@ -444,7 +487,7 @@ export default function App() {
           {activeTab === 'studio' && (
             <div className="flex flex-col lg:flex-row h-full overflow-hidden">
               
-              {/* Code Editor Panel (Native Ultra-Fast Mobile Editor) */}
+              {/* Code Editor Panel */}
               <div className="flex-1 flex flex-col h-[56%] lg:h-full border-b lg:border-b-0 lg:border-r border-neutral-800">
                 <div className="h-10 bg-[#161a23] flex items-center justify-between px-3 border-b border-neutral-800 shrink-0">
                   <select 
@@ -475,7 +518,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Mobile & Web Fast Code Editor */}
+                {/* Robust Line-Numbered Mobile Editor */}
                 <div className="flex-1 w-full bg-[#0b0e14] p-2 flex overflow-hidden font-mono text-xs">
                   <div className="w-8 text-neutral-600 select-none text-right pr-2 pt-1 font-mono text-[11px] border-r border-neutral-800/80">
                     {code.split('\n').map((_, i) => (
@@ -688,7 +731,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3: QUIZ & ASSESSMENT (All 4 Options Visible) */}
+          {/* TAB 3: QUIZ & ASSESSMENT (All Options Available) */}
           {activeTab === 'quiz' && (
             <div className="h-full p-3 lg:p-4 flex flex-col lg:flex-row gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto pb-24 lg:pb-4">
               <div className="w-full lg:w-64 bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
