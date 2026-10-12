@@ -330,4 +330,7 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(5000, () => console.log('🚀 Interactive Backend running on http://localhost:5000'));
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 SVVV Lab Backend is active and running on http://0.0.0.0:${PORT}`);
+});

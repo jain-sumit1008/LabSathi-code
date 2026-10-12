@@ -7,16 +7,19 @@ import {
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import io from 'socket.io-client';
-import axios from 'axios';
 
-// If running inside native Android WebView, use Wi-Fi IP; otherwise keep localhost
-const BACKEND_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:5000' 
-  : 'http://YOUR_WIFI_IP:5000';
+// CHANGE THIS TO YOUR LAPTOP'S IPv4 ADDRESS (e.g. 'http://192.168.1.15:5000')
+const LAPTOP_IP = 'http://192.168.1.15:5000';
 
-const socket = io(BACKEND_URL);
+const BACKEND_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+  ? 'http://localhost:5000'
+  : LAPTOP_IP;
 
-// Clean, simple static test code for all three languages
+const socket = io(BACKEND_URL, {
+  transports: ['websocket', 'polling'],
+  reconnectionAttempts: 5
+});
+
 const TEMPLATES = {
   python: `# Python 3.10
 print("Hello World. This is LabSathi application.")
@@ -38,7 +41,6 @@ public class Main {
 `
 };
 
-// 5 Python Lab Quiz Questions (5 marks each = 25 marks total)
 const QUIZ_QUESTIONS = [
   {
     id: 1,
@@ -84,6 +86,7 @@ const QUIZ_QUESTIONS = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('studio');
+  const [isConnected, setIsConnected] = useState(false);
 
   // Tab 1: Studio state
   const [language, setLanguage] = useState('python');
@@ -92,7 +95,7 @@ export default function App() {
   const [terminalInputVal, setTerminalInputVal] = useState('');
   const terminalEndRef = useRef(null);
 
-  // Tab 2: Full Lecture Content Restored (Module 1 + Module 2)
+  // Tab 2: Lectures state
   const [course, setCourse] = useState({
     courseTitle: "Operating Systems & System Programming",
     faculty: "Dr. Sachin Sharma (SVVV CS Dept)",
@@ -101,16 +104,16 @@ export default function App() {
         id: "mod_1",
         title: "Module 1: Process Management & System Calls",
         lectures: [
-          { id: "lec_101", title: "1.1 Introduction to OS & Kernel Archite...", duration: "14m", videoUrl: "https://www.youtube.com/embed/26QPDBe-NB8", isCompleted: true },
-          { id: "lec_102", title: "1.2 Process Creation with fork() & exec(...)", duration: "22m", videoUrl: "https://www.youtube.com/embed/xVSPv-9x3gk", isCompleted: true },
-          { id: "lec_103", title: "1.3 Zombie & Orphan Processes Explai...", duration: "18m", videoUrl: "https://www.youtube.com/embed/94URLRNv3VU", isCompleted: false }
+          { id: "lec_101", title: "1.1 Introduction to OS & Kernel Architecture", duration: "14m", videoUrl: "https://www.youtube.com/embed/26QPDBe-NB8", isCompleted: true },
+          { id: "lec_102", title: "1.2 Process Creation with fork() & exec()", duration: "22m", videoUrl: "https://www.youtube.com/embed/xVSPv-9x3gk", isCompleted: true },
+          { id: "lec_103", title: "1.3 Zombie & Orphan Processes Explained", duration: "18m", videoUrl: "https://www.youtube.com/embed/94URLRNv3VU", isCompleted: false }
         ]
       },
       {
         id: "mod_2",
         title: "Module 2: CPU Scheduling & Synchronization",
         lectures: [
-          { id: "lec_201", title: "2.1 FCFS & Round Robin Scheduling Al...", duration: "25m", videoUrl: "https://www.youtube.com/embed/EWkqlL11kQ8", isCompleted: false },
+          { id: "lec_201", title: "2.1 FCFS & Round Robin Scheduling Algorithms", duration: "25m", videoUrl: "https://www.youtube.com/embed/EWkqlL11kQ8", isCompleted: false },
           { id: "lec_202", title: "2.2 Mutex Locks and Semaphores in Java", duration: "28m", videoUrl: "https://www.youtube.com/embed/gXgK5Qn_n6E", isCompleted: false }
         ]
       }
@@ -125,83 +128,86 @@ export default function App() {
     isCompleted: true
   });
 
-  const [notes, setNotes] = useState('Hi this is Sumit and its my 2nd lecture.');
-  
-  // Interactive To-Do List with delete capability
+  const [notes, setNotes] = useState('Hi this is my lab lecture notes.');
   const [todos, setTodos] = useState([
     { id: 1, text: 'Review fork() process tree diagram', done: false },
     { id: 2, text: 'Complete Lab Practical Task 3', done: true },
-    { id: 3, text: 'FCFS', done: false }
+    { id: 3, text: 'Analyze FCFS Gantt chart', done: false }
   ]);
   const [newTodo, setNewTodo] = useState('');
 
-  // Tab 3: Quiz State (5 questions, 5 marks each = 25 marks)
+  // Tab 3: Quiz State
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
-  // Tab 4: Clean initial messages without hardcoded presets
+  // Tab 4: Chat State
   const [activeChannel, setActiveChannel] = useState('python-queries');
   const [channelMessages, setChannelMessages] = useState({
     'python-queries': [
       { sender: 'LabSathi Assistant', role: 'faculty', text: 'Did you have some query i can help you', time: '10:00 AM' }
     ],
     'os-lab-batch-b': [
-      { sender: 'LabSathi Assistant', role: 'faculty', text: 'Did you have some query i can help you', time: '10:00 AM' }
+      { sender: 'LabSathi Assistant', role: 'faculty', text: 'Welcome to the OS Lab Batch B channel.', time: '10:00 AM' }
     ],
     'oops-cpp-doubts': [
-      { sender: 'LabSathi Assistant', role: 'faculty', text: 'Did you have some query i can help you', time: '10:00 AM' }
+      { sender: 'LabSathi Assistant', role: 'faculty', text: 'Post your C++ object-oriented programming queries here.', time: '10:00 AM' }
     ],
     'faculty-help': [
-      { sender: 'Dr. Sachin Sharma', role: 'faculty', text: 'Did you have some query i can help you', time: '10:00 AM' }
+      { sender: 'Dr. Sachin Sharma', role: 'faculty', text: 'Official Faculty Helpdesk is open. Please share your code doubts.', time: '10:00 AM' }
     ],
     'ai-assistant': [
-      { sender: 'LabSathi AI', role: 'ai', text: 'Did you have some query i can help you', time: '10:00 AM' }
+      { sender: 'LabSathi AI', role: 'ai', text: 'Hi! I am your 24/7 AI Lab Assistant. Ask me to explain code or debug errors.', time: '10:00 AM' }
     ]
   });
   const [inputMsg, setInputMsg] = useState('');
   const chatBottomRef = useRef(null);
 
-  // Tab 5: Dynamic Profile & Lab Record History States
+  // Tab 5: Profile State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Kanak Solanki',
     enrollment: '0827CS211042',
-    branchSem: 'CSE • Sem 1st',
+    branchSem: 'Computer Science • Semester 1',
     college: 'Shri Vaishnav Vidyapeeth Vishwavidyalaya, Indore',
     email: 'kanak.solanki@svvv.edu.in',
     bio: 'Undergraduate Computer Science student focusing on OS systems programming, C++, and Python problem solving.'
   });
 
-  const [practicalHistory, setPracticalHistory] = useState([
+  const [practicalHistory] = useState([
     {
       id: 4,
       title: 'Practical 04: Process Tree Execution using fork() & exec()',
       lang: 'C++',
       date: '10 Oct 2026',
-      status: 'Verified by Faculty',
-      verified: true
+      status: 'Verified by Faculty'
     },
     {
       id: 3,
       title: 'Practical 03: Multithreaded Matrix Multiplication',
       lang: 'Java',
       date: '03 Oct 2026',
-      status: 'Verified by Faculty',
-      verified: true
+      status: 'Verified by Faculty'
     },
     {
       id: 2,
       title: 'Practical 02: Fibonacci Generator & Dynamic Recursion',
       lang: 'Python',
       date: '26 Sep 2026',
-      status: 'Submitted & Evaluated',
-      verified: true
+      status: 'Submitted & Evaluated'
     },
-
+    {
+      id: 1,
+      title: 'Practical 01: Linux Kernel Architecture & System Calls Lab',
+      lang: 'Linux / Shell',
+      date: '19 Sep 2026',
+      status: 'Verified by Faculty'
+    }
   ]);
 
   useEffect(() => {
+    socket.on('connect', () => setIsConnected(true));
+    socket.on('disconnect', () => setIsConnected(false));
     socket.emit('join_lab', 'general');
 
     socket.on('terminal_data', (chunk) => {
@@ -217,6 +223,8 @@ export default function App() {
     });
 
     return () => {
+      socket.off('connect');
+      socket.off('disconnect');
       socket.off('terminal_data');
       socket.off('receive_chat_message');
     };
@@ -230,7 +238,6 @@ export default function App() {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [channelMessages, activeChannel]);
 
-  // Tab 1 Handlers
   const handleLanguageChange = (newLang) => {
     setLanguage(newLang);
     setCode(TEMPLATES[newLang]);
@@ -250,11 +257,9 @@ export default function App() {
     setTerminalInputVal('');
   };
 
-  // SHARE TO CHAT HANDLER
   const handleShareToChat = () => {
     const targetChannel = language === 'cpp' ? 'oops-cpp-doubts' : 'python-queries';
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
     const sharedMsg = {
       sender: profileData.name || 'Student',
       role: 'student',
@@ -273,7 +278,6 @@ export default function App() {
     setActiveTab('chat');
   };
 
-  // Tab 2 Progress & Lecture Handlers
   const calculateProgress = () => {
     if (!course || !course.modules) return 0;
     let total = 0, completed = 0;
@@ -297,7 +301,6 @@ export default function App() {
     }
   };
 
-  // Tab 2 To-Do Handlers
   const handleAddTodo = () => {
     if (!newTodo.trim()) return;
     setTodos([...todos, { id: Date.now(), text: newTodo, done: false }]);
@@ -310,15 +313,6 @@ export default function App() {
 
   const handleDeleteTodo = (id) => {
     setTodos(todos.filter(t => t.id !== id));
-  };
-
-  // Tab 3 Quiz Helpers
-  const handleSelectQuizOption = (optionIndex) => {
-    if (quizSubmitted) return;
-    setQuizAnswers({
-      ...quizAnswers,
-      [currentQIndex]: optionIndex
-    });
   };
 
   const calculateQuizScore = () => {
@@ -337,10 +331,8 @@ export default function App() {
     setCurrentQIndex(0);
   };
 
-  // Tab 4 Message Dispatcher
   const handleSendMessage = () => {
     if (!inputMsg.trim()) return;
-
     const userMessage = {
       sender: profileData.name || 'Student',
       role: 'student',
@@ -354,17 +346,13 @@ export default function App() {
         ...prev,
         'ai-assistant': [...(prev['ai-assistant'] || []), userMessage]
       }));
-
       socket.emit('ai_query', { text: inputMsg });
-      setInputMsg('');
-      return;
+    } else {
+      socket.emit('send_chat_message', userMessage);
     }
-
-    socket.emit('send_chat_message', userMessage);
     setInputMsg('');
   };
 
-  // Dynamic Avatar Initials Helper
   const getAvatarInitials = (fullName) => {
     if (!fullName) return 'ST';
     const parts = fullName.trim().split(' ');
@@ -378,31 +366,36 @@ export default function App() {
   const activeMsgs = channelMessages[activeChannel] || [];
 
   return (
-    <div className="flex justify-center items-center h-screen bg-neutral-950 font-sans p-2">
-      <div className="w-[1024px] h-[580px] bg-[#12161f] border-4 border-neutral-800 rounded-3xl flex flex-col overflow-hidden shadow-2xl relative text-white">
+    <div className="w-full h-screen bg-neutral-950 font-sans flex items-center justify-center p-0 lg:p-4 overflow-hidden select-none">
+      
+      {/* DESKTOP + MOBILE UNIVERSAL WRAPPER */}
+      <div className="w-full h-full lg:max-w-6xl lg:h-[620px] bg-[#12161f] lg:border-4 lg:border-neutral-800 lg:rounded-3xl flex flex-col overflow-hidden shadow-2xl relative text-white">
         
         {/* TOP STATUS BAR */}
-        <div className="h-8 bg-[#0f121a] flex justify-between items-center px-6 text-xs text-neutral-400 select-none border-b border-neutral-800">
-          <span className="font-semibold text-neutral-300">LabSathi • SVVV Indore</span>
-          <div className="flex items-center space-x-4">
-            <span className="text-emerald-400">● Connected to Lab Network</span>
-            <span>📶 88%</span>
+        <div className="h-9 bg-[#0f121a] flex justify-between items-center px-4 lg:px-6 text-xs text-neutral-400 border-b border-neutral-800 shrink-0">
+          <span className="font-semibold text-neutral-300 truncate">LabSathi • SVVV Indore</span>
+          <div className="flex items-center space-x-3 text-[11px]">
+            <span className={isConnected ? "text-emerald-400" : "text-amber-400 font-semibold"}>
+              ● {isConnected ? "Connected to Lab Network" : "Connecting to Lab..."}
+            </span>
+            <span className="hidden sm:inline">📶 88%</span>
           </div>
         </div>
 
-        {/* MAIN BODY AREA */}
+        {/* MAIN MULTI-TAB DISPLAY AREA */}
         <div className="flex-1 overflow-hidden relative">
 
           {/* TAB 1: CODE STUDIO */}
           {activeTab === 'studio' && (
-            <div className="flex h-full">
-              {/* Left: Code Editor */}
-              <div className="flex-1 flex flex-col border-r border-neutral-800">
-                <div className="h-10 bg-[#161a23] flex items-center justify-between px-3 border-b border-neutral-800">
+            <div className="flex flex-col lg:flex-row h-full overflow-hidden">
+              
+              {/* Code Editor Panel */}
+              <div className="flex-1 flex flex-col h-[60%] lg:h-full border-b lg:border-b-0 lg:border-r border-neutral-800">
+                <div className="h-10 bg-[#161a23] flex items-center justify-between px-3 border-b border-neutral-800 shrink-0">
                   <select 
                     value={language} 
                     onChange={(e) => handleLanguageChange(e.target.value)}
-                    className="bg-neutral-800 text-xs px-2 py-1 rounded text-cyan-400 font-mono outline-none cursor-pointer"
+                    className="bg-neutral-800 text-xs px-2.5 py-1 rounded text-cyan-400 font-mono outline-none cursor-pointer"
                   >
                     <option value="python">Python 3.10</option>
                     <option value="cpp">C++ (GCC 13 / g++)</option>
@@ -414,33 +407,33 @@ export default function App() {
                       onClick={handleShareToChat}
                       className="flex items-center space-x-1 text-xs bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 rounded transition"
                     >
-                      <Share2 size={13} /> <span>Share to Chat</span>
+                      <Share2 size={13} /> <span className="hidden sm:inline">Share to Chat</span>
                     </button>
                     <button 
                       onClick={handleRunCode} 
-                      className="flex items-center space-x-1 text-xs bg-emerald-600 hover:bg-emerald-500 font-bold px-3 py-1 rounded text-white transition"
+                      className="flex items-center space-x-1 text-xs bg-emerald-600 hover:bg-emerald-500 font-bold px-3 py-1 rounded text-white transition shadow"
                     >
                       <Play size={13} fill="white" /> <span>Run Code</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="flex-1">
+                <div className="flex-1 w-full overflow-hidden">
                   <Editor
                     height="100%"
                     language={language === 'cpp' ? 'cpp' : language}
                     theme="vs-dark"
                     value={code}
                     onChange={(val) => setCode(val || '')}
-                    options={{ minimap: { enabled: false }, fontSize: 13 }}
+                    options={{ minimap: { enabled: false }, fontSize: 13, automaticLayout: true }}
                   />
                 </div>
               </div>
 
-              {/* Right: Output Terminal */}
-              <div className="w-80 bg-[#0d1017] flex flex-col font-mono text-xs border-l border-neutral-800">
-                <div className="h-9 bg-[#10141d] px-3 flex items-center justify-between text-neutral-400 border-b border-neutral-800">
-                  <span className="font-bold text-[11px]">TERMINAL OUTPUT</span>
+              {/* Terminal Output Panel */}
+              <div className="h-[40%] lg:h-full w-full lg:w-80 bg-[#0d1017] flex flex-col font-mono text-xs border-t lg:border-t-0 lg:border-l border-neutral-800">
+                <div className="h-9 bg-[#10141d] px-3 flex items-center justify-between text-neutral-400 border-b border-neutral-800 shrink-0">
+                  <span className="font-bold text-[11px] tracking-wider">TERMINAL OUTPUT</span>
                   <button onClick={() => setTerminalOutput('')} className="text-neutral-500 hover:text-white transition">Clear</button>
                 </div>
                 
@@ -449,17 +442,16 @@ export default function App() {
                   <div ref={terminalEndRef} />
                 </div>
 
-                {/* Inline Console Input Line */}
                 <form 
                   onSubmit={handleSendTerminalInput} 
-                  className="h-10 bg-[#141822] border-t border-neutral-800 px-2 flex items-center gap-1.5"
+                  className="h-10 bg-[#141822] border-t border-neutral-800 px-2 flex items-center gap-1.5 shrink-0"
                 >
                   <span className="text-cyan-400 font-bold">{'>'}</span>
                   <input
                     type="text"
                     value={terminalInputVal}
                     onChange={(e) => setTerminalInputVal(e.target.value)}
-                    placeholder="Type value (if required) and press Enter..."
+                    placeholder="Terminal input (type and press Enter)..."
                     className="flex-1 bg-transparent text-white outline-none font-mono text-xs"
                   />
                   <button type="submit" className="text-neutral-400 hover:text-cyan-400 p-1">
@@ -467,15 +459,16 @@ export default function App() {
                   </button>
                 </form>
               </div>
+
             </div>
           )}
 
           {/* TAB 2: LIVE LECTURES */}
           {activeTab === 'lectures' && (
-            <div className="flex h-full p-4 gap-4 bg-[#0d1017]">
+            <div className="flex flex-col lg:flex-row h-full p-3 lg:p-4 gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto lg:overflow-hidden">
               
-              {/* Left Column: Modules & Course Syllabus */}
-              <div className="w-[340px] bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between overflow-hidden">
+              {/* Left Column: Course Modules */}
+              <div className="w-full lg:w-[320px] bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -487,16 +480,14 @@ export default function App() {
                     </span>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden mb-4">
+                  <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden mb-3">
                     <div 
                       className="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500" 
                       style={{ width: `${calculateProgress()}%` }}
                     />
                   </div>
 
-                  {/* Modules Accordion List */}
-                  <div className="space-y-3 overflow-y-auto max-h-[360px] pr-1">
+                  <div className="space-y-2.5 max-h-[220px] lg:max-h-[350px] overflow-y-auto pr-1">
                     {course.modules.map((mod) => (
                       <div key={mod.id} className="bg-[#181d2a] p-2.5 rounded-xl border border-neutral-800/80">
                         <span className="text-xs font-semibold text-neutral-300 block mb-2">{mod.title}</span>
@@ -536,9 +527,9 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Center Column: Video Stream & Controls */}
-              <div className="flex-1 flex flex-col gap-3">
-                <div className="flex-1 bg-black rounded-2xl overflow-hidden border border-neutral-800 relative shadow-inner">
+              {/* Center Column: Video Stream */}
+              <div className="flex-1 flex flex-col gap-3 min-h-[240px] shrink-0">
+                <div className="flex-1 aspect-video lg:aspect-auto bg-black rounded-2xl overflow-hidden border border-neutral-800 relative shadow-inner">
                   {activeLecture ? (
                     <iframe
                       className="w-full h-full"
@@ -556,22 +547,22 @@ export default function App() {
                 </div>
 
                 <div className="bg-[#141822] px-4 py-2.5 rounded-xl border border-neutral-800 flex justify-between items-center text-xs">
-                  <div>
+                  <div className="truncate mr-2">
                     <span className="text-neutral-400">Now Playing: </span>
-                    <span className="font-semibold text-white">{activeLecture?.title || "None"}</span>
+                    <span className="font-semibold text-white truncate">{activeLecture?.title || "None"}</span>
                   </div>
                   <button 
                     onClick={() => activeLecture && handleToggleComplete(activeLecture.id)}
-                    className="bg-emerald-600/80 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0"
                   >
-                    {activeLecture?.isCompleted ? "Mark as Completed ✔" : "Mark Completed"}
+                    {activeLecture?.isCompleted ? "Completed ✔" : "Mark Done"}
                   </button>
                 </div>
               </div>
 
-              {/* Right Column: Lecture Notes & Interactive Deletable Tasks */}
-              <div className="w-[280px] bg-[#141822] rounded-2xl p-3 border border-neutral-800 flex flex-col justify-between">
-                <div className="flex flex-col flex-1 mb-3">
+              {/* Right Column: Notes & Deletable To-Do */}
+              <div className="w-full lg:w-[280px] bg-[#141822] rounded-2xl p-3.5 border border-neutral-800 flex flex-col justify-between shrink-0">
+                <div className="flex flex-col mb-3">
                   <span className="text-xs font-bold text-neutral-300 mb-1 flex items-center justify-between">
                     <span>📝 Lecture Notes</span>
                     <span className="text-[10px] text-neutral-500 font-normal">Auto-saved</span>
@@ -580,18 +571,18 @@ export default function App() {
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Take notes..."
-                    className="flex-1 bg-[#10131b] p-2.5 rounded-xl text-xs text-neutral-200 outline-none border border-neutral-800 resize-none font-mono"
+                    rows={4}
+                    className="bg-[#10131b] p-2.5 rounded-xl text-xs text-neutral-200 outline-none border border-neutral-800 resize-none font-mono"
                   />
                 </div>
 
-                {/* To-Do Checklist with Delete Action */}
-                <div className="h-[180px] flex flex-col pt-2 border-t border-neutral-800">
+                <div className="flex flex-col pt-2 border-t border-neutral-800">
                   <span className="text-xs font-bold text-neutral-300 mb-1.5">Tasks / To-Do List</span>
-                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                  <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1 text-xs">
                     {todos.map(todo => (
                       <div 
                         key={todo.id} 
-                        className="flex items-center justify-between p-1.5 rounded bg-[#181d2a] hover:bg-neutral-800 transition group"
+                        className="flex items-center justify-between p-1.5 rounded bg-[#181d2a] hover:bg-neutral-800 transition"
                       >
                         <div 
                           onClick={() => handleToggleTodo(todo.id)}
@@ -607,8 +598,6 @@ export default function App() {
                             {todo.text}
                           </span>
                         </div>
-                        
-                        {/* Delete Button */}
                         <button
                           onClick={() => handleDeleteTodo(todo.id)}
                           title="Delete Task"
@@ -631,7 +620,7 @@ export default function App() {
                     />
                     <button 
                       onClick={handleAddTodo}
-                      className="bg-cyan-600 hover:bg-cyan-500 px-2 py-1 text-xs font-bold rounded-lg"
+                      className="bg-cyan-600 hover:bg-cyan-500 px-3 py-1 text-xs font-bold rounded-lg"
                     >
                       +
                     </button>
@@ -644,10 +633,10 @@ export default function App() {
 
           {/* TAB 3: QUIZ & ASSESSMENT */}
           {activeTab === 'quiz' && (
-            <div className="h-full p-4 flex gap-4 bg-[#0d1017]">
+            <div className="h-full p-3 lg:p-4 flex flex-col lg:flex-row gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto lg:overflow-hidden">
               
-              {/* Left Panel: Question Navigator & Summary */}
-              <div className="w-64 bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between">
+              {/* Left Summary Box */}
+              <div className="w-full lg:w-64 bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
                 <div>
                   <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-2">
                     <div>
@@ -664,7 +653,7 @@ export default function App() {
                     <span className="text-white font-semibold">{answeredCount} of {QUIZ_QUESTIONS.length} Answered</span>
                   </div>
 
-                  {/* Question Index Buttons */}
+                  {/* Question Indicator Numbers */}
                   <div className="grid grid-cols-5 gap-2 mb-4">
                     {QUIZ_QUESTIONS.map((q, idx) => {
                       const isAnswered = quizAnswers[idx] !== undefined;
@@ -696,66 +685,55 @@ export default function App() {
                       <span>Negative Marking:</span>
                       <span className="text-emerald-400 font-medium">None (0)</span>
                     </div>
-                    <div className="flex items-center justify-between text-neutral-400">
-                      <span>Passing Score:</span>
-                      <span className="text-white font-medium">15 / 25 (60%)</span>
-                    </div>
                   </div>
                 </div>
 
                 {!quizSubmitted ? (
                   <button
                     onClick={() => setQuizSubmitted(true)}
-                    className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-1.5"
+                    className="w-full mt-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-1.5"
                   >
-                    <CheckCircle size={14} /> Submit Final Assessment
+                    <CheckCircle size={14} /> Submit Assessment
                   </button>
                 ) : (
                   <button
                     onClick={resetQuiz}
-                    className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                    className="w-full mt-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
                   >
                     <RotateCcw size={14} /> Retake Assessment
                   </button>
                 )}
               </div>
 
-              {/* Right Panel: Interactive Question Screen or Scorecard */}
-              <div className="flex-1 bg-[#141822] rounded-2xl p-5 border border-neutral-800 flex flex-col justify-between overflow-hidden">
+              {/* Right Question Box or Detailed Result */}
+              <div className="flex-1 bg-[#141822] rounded-2xl p-4 lg:p-5 border border-neutral-800 flex flex-col justify-between overflow-hidden">
                 {!quizSubmitted ? (
                   <>
                     <div>
-                      {/* Question Header */}
                       <div className="flex justify-between items-center mb-3 border-b border-neutral-800 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/40 text-xs font-mono font-bold">
-                            Question {currentQIndex + 1} of {QUIZ_QUESTIONS.length}
-                          </span>
-                          <span className="text-xs text-neutral-500">Weightage: 5 Marks</span>
-                        </div>
+                        <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/40 text-xs font-mono font-bold">
+                          Question {currentQIndex + 1} of {QUIZ_QUESTIONS.length}
+                        </span>
                         <span className="text-[11px] text-neutral-400 font-mono">
                           {quizAnswers[currentQIndex] !== undefined ? '● Saved' : '○ Not Attempted'}
                         </span>
                       </div>
 
-                      {/* Question Text */}
                       <h2 className="text-sm font-semibold text-neutral-200 mb-3">{currentQ.question}</h2>
 
-                      {/* Code Block */}
                       {currentQ.code && (
-                        <pre className="bg-[#0b0e14] p-3 rounded-xl font-mono text-xs text-emerald-400 border border-neutral-800/80 mb-4 whitespace-pre">
+                        <pre className="bg-[#0b0e14] p-3 rounded-xl font-mono text-xs text-emerald-400 border border-neutral-800/80 mb-3 whitespace-pre overflow-x-auto">
                           {currentQ.code}
                         </pre>
                       )}
 
-                      {/* Options Grid */}
-                      <div className="grid grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {currentQ.options.map((opt, i) => {
                           const isSelected = quizAnswers[currentQIndex] === i;
                           return (
                             <button
                               key={i}
-                              onClick={() => handleSelectQuizOption(i)}
+                              onClick={() => setQuizAnswers({ ...quizAnswers, [currentQIndex]: i })}
                               className={`p-3 rounded-xl border text-left text-xs transition flex items-center gap-2.5 ${
                                 isSelected
                                   ? 'border-cyan-400 bg-cyan-950/40 text-cyan-200 font-semibold'
@@ -774,84 +752,53 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Navigation Footer */}
-                    <div className="flex justify-between items-center pt-3 border-t border-neutral-800">
+                    <div className="flex justify-between items-center pt-3 border-t border-neutral-800 mt-3">
                       <button
                         onClick={() => setCurrentQIndex((prev) => Math.max(0, prev - 1))}
                         disabled={currentQIndex === 0}
-                        className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 disabled:hover:bg-neutral-800 transition"
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 transition"
                       >
                         <ChevronLeft size={14} /> Previous
                       </button>
-
-                      <span className="text-[11px] text-neutral-500 font-mono">
-                        Question {currentQIndex + 1} / {QUIZ_QUESTIONS.length}
-                      </span>
-
                       <button
                         onClick={() => setCurrentQIndex((prev) => Math.min(QUIZ_QUESTIONS.length - 1, prev + 1))}
                         disabled={currentQIndex === QUIZ_QUESTIONS.length - 1}
-                        className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 disabled:hover:bg-neutral-800 transition"
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 transition"
                       >
                         Next <ChevronRight size={14} />
                       </button>
                     </div>
                   </>
                 ) : (
-                  /* Detailed Assessment Scorecard */
-                  <div className="flex h-full gap-4">
-                    {/* Score Summary Box */}
-                    <div className="w-56 bg-[#10141d] rounded-xl p-4 border border-neutral-800 flex flex-col justify-between text-center">
-                      <div>
-                        <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-2 bg-emerald-500/10 border border-emerald-500/30">
-                          <CheckCircle size={24} className="text-emerald-400" />
-                        </div>
-                        <h4 className="text-xs font-bold text-neutral-300">Assessment Result</h4>
-                        <div className="text-3xl font-black text-cyan-400 my-2">{totalScore} <span className="text-sm font-normal text-neutral-500">/ 25</span></div>
-                        <p className={`text-xs font-bold ${totalScore >= 15 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {totalScore >= 15 ? 'PASSED (VERIFIED)' : 'NEEDS IMPROVEMENT'}
-                        </p>
-                        <p className="text-[10px] text-neutral-500 mt-1">Accuracy: {(totalScore / 25) * 100}%</p>
-                      </div>
-
-                      <div className="text-[10px] text-neutral-500 border-t border-neutral-800 pt-2">
-                        Recorded to SVVV Python Practical Assessment Log
-                      </div>
+                  <div className="flex flex-col sm:flex-row h-full gap-4 overflow-y-auto">
+                    <div className="w-full sm:w-48 bg-[#10141d] rounded-xl p-4 border border-neutral-800 text-center flex flex-col justify-center shrink-0">
+                      <CheckCircle size={32} className="text-emerald-400 mx-auto mb-1.5" />
+                      <h4 className="text-xs font-bold text-neutral-300">Total Score</h4>
+                      <div className="text-3xl font-black text-cyan-400 my-1">{totalScore} <span className="text-xs font-normal text-neutral-500">/ 25</span></div>
+                      <p className="text-xs font-bold text-emerald-400">PASSED</p>
                     </div>
 
-                    {/* Detailed Question Review List */}
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                      <span className="text-xs font-bold text-neutral-300 mb-2">Itemized Question Analysis:</span>
-                      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                        {QUIZ_QUESTIONS.map((q, idx) => {
-                          const userAns = quizAnswers[idx];
-                          const isCorrect = userAns === q.correctIndex;
-                          return (
-                            <div key={q.id} className="p-3 bg-[#0d1017] rounded-xl border border-neutral-800/80 text-xs">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-semibold text-neutral-300">Q{idx + 1}: {q.question}</span>
-                                <span className={`flex items-center gap-1 font-mono font-bold ${isCorrect ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                  {isCorrect ? <CheckCircle size={13} /> : <XCircle size={13} />}
-                                  {isCorrect ? '+5' : '0'} / 5
-                                </span>
-                              </div>
-                              <div className="text-[11px] space-y-0.5 mt-1.5">
-                                <div className="text-neutral-400">
-                                  Your Answer: <span className={isCorrect ? 'text-emerald-400 font-medium' : 'text-rose-400 font-medium'}>
-                                    {userAns !== undefined ? `${String.fromCharCode(65 + userAns)}. ${q.options[userAns]}` : 'Not Answered'}
-                                  </span>
-                                </div>
-                                {!isCorrect && (
-                                  <div className="text-neutral-400">
-                                    Correct Answer: <span className="text-emerald-400 font-medium">{String.fromCharCode(65 + q.correctIndex)}. {q.options[q.correctIndex]}</span>
-                                  </div>
-                                )}
-                                <p className="text-[10px] text-neutral-500 italic mt-1">💡 {q.explanation}</p>
-                              </div>
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                      {QUIZ_QUESTIONS.map((q, idx) => {
+                        const userAns = quizAnswers[idx];
+                        const isCorrect = userAns === q.correctIndex;
+                        return (
+                          <div key={q.id} className="p-2.5 bg-[#0d1017] rounded-xl border border-neutral-800 text-xs">
+                            <div className="flex justify-between font-semibold text-neutral-200 mb-1">
+                              <span>Q{idx + 1}: {q.question}</span>
+                              <span className={isCorrect ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                                {isCorrect ? '+5' : '0'} / 5
+                              </span>
                             </div>
-                          );
-                        })}
-                      </div>
+                            <p className="text-[11px] text-neutral-400">
+                              Your answer: <span className={isCorrect ? 'text-emerald-400' : 'text-rose-400'}>
+                                {userAns !== undefined ? q.options[userAns] : 'Not answered'}
+                              </span>
+                            </p>
+                            <p className="text-[10px] text-neutral-500 italic mt-0.5">💡 {q.explanation}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -860,287 +807,122 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 4: CHATBOT, FACULTY INTERACTION & PYTHON FRONT CHANNEL */}
+          {/* TAB 4: CHAT & FACULTY DESK */}
           {activeTab === 'chat' && (
-            <div className="flex h-full bg-[#0f121a]">
+            <div className="flex flex-col sm:flex-row h-full bg-[#0f121a] overflow-hidden">
               
-              {/* Left Column: Channels & Faculty Direct Connect */}
-              <div className="w-60 bg-[#141822] border-r border-neutral-800 p-3 flex flex-col justify-between text-xs">
-                <div className="space-y-4">
-                  {/* Category 1: Lab Channels (Python is FIRST/SWAPPED in FRONT) */}
-                  <div>
-                    <span className="text-[10px] tracking-wider text-neutral-500 font-bold uppercase block mb-1.5">
-                      Lab Channels
-                    </span>
-                    <div className="space-y-1">
-                      {[
-                        { id: 'python-queries', label: 'python-queries', tag: 'Active' },
-                        { id: 'os-lab-batch-b', label: 'os-lab-batch-b' },
-                        { id: 'oops-cpp-doubts', label: 'oops-cpp-doubts' },
-                      ].map((ch) => {
-                        const isActive = activeChannel === ch.id;
-                        return (
-                          <div
-                            key={ch.id}
-                            onClick={() => setActiveChannel(ch.id)}
-                            className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${
-                              isActive
-                                ? 'bg-cyan-950/60 border border-cyan-700/50 text-cyan-300 font-semibold'
-                                : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
-                            }`}
-                          >
-                            <span className="flex items-center gap-1.5 truncate">
-                              <Hash size={13} className={isActive ? 'text-cyan-400' : 'text-neutral-500'} />
-                              <span className="truncate">{ch.label}</span>
-                            </span>
-                            {ch.tag && (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-900/40 text-cyan-300 font-mono">
-                                {ch.tag}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Category 2: Faculty Desk */}
-                  <div>
-                    <span className="text-[10px] tracking-wider text-neutral-500 font-bold uppercase block mb-1.5">
-                      Faculty Direct Connect
-                    </span>
-                    <div
-                      onClick={() => setActiveChannel('faculty-help')}
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition ${
-                        activeChannel === 'faculty-help'
-                          ? 'bg-emerald-950/50 border border-emerald-700/50 text-emerald-300 font-semibold'
-                          : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
-                      }`}
-                    >
-                      <div className="relative">
-                        <div className="w-5 h-5 rounded-full bg-emerald-800 flex items-center justify-center text-[10px] font-bold text-white">
-                          SS
-                        </div>
-                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full absolute -bottom-0.5 -right-0.5" />
-                      </div>
-                      <div className="truncate flex-1">
-                        <span className="truncate block">Dr. Sachin Sharma</span>
-                        <span className="text-[9px] text-emerald-400/80 block">Faculty Advisor</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Category 3: AI Lab Copilot */}
-                  <div>
-                    <span className="text-[10px] tracking-wider text-neutral-500 font-bold uppercase block mb-1.5">
-                      AI Assistants
-                    </span>
-                    <div
-                      onClick={() => setActiveChannel('ai-assistant')}
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition ${
-                        activeChannel === 'ai-assistant'
-                          ? 'bg-purple-950/60 border border-purple-600/50 text-purple-300 font-semibold shadow-inner'
-                          : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
-                      }`}
-                    >
-                      <Bot size={15} className="text-purple-400" />
-                      <div className="flex-1 truncate">
-                        <span className="truncate block">LabSathi AI</span>
-                        <span className="text-[9px] text-purple-400/80 flex items-center gap-0.5">
-                          <Sparkles size={8} /> 24/7 Code Mentor
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* User Status Bar */}
-                <div className="p-2 bg-[#0c0e14] rounded-xl border border-neutral-800/80 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-cyan-700 flex items-center justify-center text-[10px] font-bold">
-                    {getAvatarInitials(profileData.name)}
-                  </div>
-                  <div className="truncate flex-1">
-                    <span className="text-[11px] font-semibold text-white block truncate">{profileData.name}</span>
-                    <span className="text-[9px] text-emerald-400 block">● Lab Online</span>
-                  </div>
+              {/* Channel List Sidebar */}
+              <div className="w-full sm:w-56 bg-[#141822] border-b sm:border-b-0 sm:border-r border-neutral-800 p-2.5 flex flex-row sm:flex-col justify-between text-xs shrink-0 overflow-x-auto sm:overflow-visible">
+                <div className="flex sm:flex-col gap-1 w-full">
+                  <span className="hidden sm:block text-[10px] tracking-wider text-neutral-500 font-bold uppercase mb-1">
+                    Lab Channels
+                  </span>
+                  {[
+                    { id: 'python-queries', label: 'python-queries' },
+                    { id: 'os-lab-batch-b', label: 'os-lab-batch-b' },
+                    { id: 'oops-cpp-doubts', label: 'oops-cpp-doubts' },
+                    { id: 'faculty-help', label: 'Dr. Sachin Sharma' },
+                    { id: 'ai-assistant', label: 'LabSathi AI Bot' },
+                  ].map((ch) => {
+                    const isActive = activeChannel === ch.id;
+                    return (
+                      <button
+                        key={ch.id}
+                        onClick={() => setActiveChannel(ch.id)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition whitespace-nowrap ${
+                          isActive
+                            ? 'bg-cyan-950/70 border border-cyan-700/50 text-cyan-300 font-semibold'
+                            : 'text-neutral-400 hover:bg-neutral-800/60'
+                        }`}
+                      >
+                        {ch.id === 'ai-assistant' ? <Bot size={13} className="text-purple-400" /> : <Hash size={13} />}
+                        <span>{ch.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Right Column: Chat Feed & Interactive Input */}
-              <div className="flex-1 flex flex-col justify-between">
-                
-                {/* Header Banner */}
-                <div className="h-10 bg-[#141822] px-4 flex items-center justify-between border-b border-neutral-800">
-                  <div className="flex items-center gap-2 text-xs">
-                    {activeChannel === 'ai-assistant' ? (
-                      <>
-                        <Bot size={15} className="text-purple-400" />
-                        <span className="font-bold text-purple-300">LabSathi AI Assistant</span>
-                        <span className="text-[10px] bg-purple-900/40 text-purple-300 px-1.5 py-0.5 rounded border border-purple-700/40">
-                          Interactive AI Mode
-                        </span>
-                      </>
-                    ) : activeChannel === 'faculty-help' ? (
-                      <>
-                        <ShieldCheck size={15} className="text-emerald-400" />
-                        <span className="font-bold text-white">Faculty Helpdesk • Dr. Sachin Sharma</span>
-                        <span className="text-[10px] bg-emerald-900/40 text-emerald-400 px-1.5 py-0.5 rounded">
-                          Official
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Hash size={15} className="text-cyan-400" />
-                        <span className="font-bold text-white">#{activeChannel}</span>
-                        <span className="text-[10px] text-neutral-500">Student Peer Discussion</span>
-                      </>
-                    )}
-                  </div>
-
+              {/* Chat Message Stream */}
+              <div className="flex-1 flex flex-col justify-between h-full overflow-hidden">
+                <div className="h-9 bg-[#141822] px-4 flex items-center justify-between border-b border-neutral-800 text-xs shrink-0">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <Hash size={14} className="text-cyan-400" /> #{activeChannel}
+                  </span>
                   <span className="text-[11px] text-neutral-400">SVVV CSE Network</span>
                 </div>
 
-                {/* Message Stream */}
-                <div className="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
-                  {/* AI Quick Prompts Chips */}
+                <div className="flex-1 p-3 lg:p-4 overflow-y-auto space-y-2.5 text-xs">
                   {activeChannel === 'ai-assistant' && (
-                    <div className="p-3 bg-purple-950/20 border border-purple-800/40 rounded-xl mb-3">
-                      <span className="text-[11px] font-semibold text-purple-300 block mb-1.5">
-                        ✨ Quick Prompts for Lab Practical:
+                    <div className="p-2.5 bg-purple-950/20 border border-purple-800/40 rounded-xl mb-2">
+                      <span className="text-[11px] font-semibold text-purple-300 block mb-1">
+                        ✨ Quick Suggestions:
                       </span>
                       <div className="flex flex-wrap gap-1.5">
-                        {[
-                          "Explain fork() memory duplication",
-                          "Why is my segmentation fault happening?",
-                          "Python list vs tuple time complexity",
-                          "How to write clean docstrings?"
-                        ].map((promptText, pIdx) => (
+                        {["Explain fork() execution", "Python list comprehension", "How does Round Robin work?"].map((txt, idx) => (
                           <button
-                            key={pIdx}
-                            onClick={() => setInputMsg(promptText)}
-                            className="text-[10px] bg-purple-900/40 hover:bg-purple-800/50 text-purple-200 px-2.5 py-1 rounded-lg border border-purple-700/40 transition"
+                            key={idx}
+                            onClick={() => setInputMsg(txt)}
+                            className="text-[10px] bg-purple-900/40 hover:bg-purple-800 text-purple-200 px-2 py-0.5 rounded border border-purple-700/40"
                           >
-                            {promptText}
+                            {txt}
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Message Rendering Block with Code Formatter */}
-                  {activeMsgs.map((m, i) => {
-                    const isFaculty = m.role === 'faculty';
-                    const isAI = m.role === 'ai';
-
-                    const parts = (m.text || '').split(/(```[\s\S]*?```)/g);
-
-                    return (
-                      <div
-                        key={i}
-                        className={`p-3 rounded-xl border max-w-xl transition ${
-                          isAI
-                            ? 'bg-[#181328] border-purple-800/40'
-                            : isFaculty
-                            ? 'bg-[#101c18] border-emerald-800/50'
-                            : 'bg-[#161a23] border-neutral-800'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-1 text-[11px]">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`font-semibold ${
-                              isAI ? 'text-purple-300 flex items-center gap-1' : isFaculty ? 'text-emerald-300' : 'text-cyan-300'
-                            }`}>
-                              {isAI && <Bot size={12} />}
-                              {m.sender}
-                            </span>
-                            {isFaculty && (
-                              <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1 rounded border border-emerald-500/30">
-                                Faculty
-                              </span>
-                            )}
-                            {isAI && (
-                              <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded border border-purple-500/30">
-                                AI Bot
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-neutral-500 text-[10px] font-mono">{m.time}</span>
-                        </div>
-
-                        {/* Structured Text & Code Formatter */}
-                        <div className="text-neutral-200 text-xs leading-relaxed space-y-2">
-                          {parts.map((part, pIdx) => {
-                            if (part.startsWith('```') && part.endsWith('```')) {
-                              const lines = part.slice(3, -3).trim().split('\n');
-                              const firstLine = lines[0].trim().toLowerCase();
-                              const hasLangHeader = ['cpp', 'c++', 'python', 'py', 'java'].includes(firstLine);
-                              const codeBody = hasLangHeader ? lines.slice(1).join('\n') : lines.join('\n');
-                              return (
-                                <pre
-                                  key={pIdx}
-                                  className="p-3 bg-[#0a0d13] rounded-lg font-mono text-emerald-400 text-[11px] overflow-x-auto whitespace-pre border border-neutral-800"
-                                >
-                                  {codeBody}
-                                </pre>
-                              );
-                            }
-                            return (
-                              <p key={pIdx} className="whitespace-pre-line">
-                                {part.replace(/###/g, '').trim()}
-                              </p>
-                            );
-                          })}
-                        </div>
+                  {activeMsgs.map((m, i) => (
+                    <div
+                      key={i}
+                      className={`p-2.5 rounded-xl border max-w-xl ${
+                        m.role === 'ai'
+                          ? 'bg-[#181328] border-purple-800/40'
+                          : m.role === 'faculty'
+                          ? 'bg-[#101c18] border-emerald-800/50'
+                          : 'bg-[#161a23] border-neutral-800'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-1 text-[11px]">
+                        <span className={`font-semibold ${m.role === 'ai' ? 'text-purple-300' : m.role === 'faculty' ? 'text-emerald-300' : 'text-cyan-300'}`}>
+                          {m.sender}
+                        </span>
+                        <span className="text-neutral-500 text-[10px]">{m.time}</span>
                       </div>
-                    );
-                  })}
+                      <div className="text-neutral-200 text-xs whitespace-pre-wrap">{m.text}</div>
+                    </div>
+                  ))}
                   <div ref={chatBottomRef} />
                 </div>
 
-                {/* Input Toolbar */}
-                <div className="h-12 border-t border-neutral-800 px-3 flex items-center space-x-2 bg-[#141822]">
+                <div className="h-12 border-t border-neutral-800 px-3 flex items-center space-x-2 bg-[#141822] shrink-0">
                   <input
                     type="text"
                     value={inputMsg}
                     onChange={(e) => setInputMsg(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                    placeholder={
-                      activeChannel === 'ai-assistant'
-                        ? "Ask LabSathi AI to debug code, explain fork(), or generate templates..."
-                        : activeChannel === 'faculty-help'
-                        ? "Message Dr. Sachin Sharma (Official Doubt)..."
-                        : "Post doubt in #" + activeChannel + "..."
-                    }
-                    className="flex-1 bg-neutral-800/90 text-xs px-3 py-2 rounded-xl outline-none text-white border border-neutral-700/40 focus:border-cyan-500 transition"
+                    placeholder={`Message in #${activeChannel}...`}
+                    className="flex-1 bg-neutral-800/90 text-xs px-3 py-2 rounded-xl outline-none text-white border border-neutral-700/40"
                   />
-                  <button 
-                    onClick={handleSendMessage} 
-                    className={`p-2 rounded-xl transition ${
-                      activeChannel === 'ai-assistant'
-                        ? 'bg-purple-600 hover:bg-purple-500 text-white'
-                        : 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                    }`}
-                  >
+                  <button onClick={handleSendMessage} className="p-2 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white">
                     <Send size={14} />
                   </button>
                 </div>
-
               </div>
+
             </div>
           )}
 
-          {/* TAB 5: PROFESSIONAL EDITABLE STUDENT PROFILE & LAB RECORD */}
+          {/* TAB 5: PROFESSIONAL PROFILE & PRACTICAL LOG */}
           {activeTab === 'profile' && (
-            <div className="p-4 h-full flex flex-col justify-between bg-[#0d1017] gap-3">
+            <div className="p-3 lg:p-5 h-full flex flex-col justify-between bg-[#0d1017] gap-3 overflow-y-auto lg:overflow-hidden">
               
-              {/* Main Content Area */}
-              <div className="flex gap-4 flex-1 overflow-hidden">
+              <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 flex-1">
                 
-                {/* Left: Editable Profile Identity Card */}
-                <div className="w-[330px] bg-[#141822] p-4 rounded-2xl border border-neutral-800 flex flex-col justify-between overflow-y-auto">
+                {/* Left Card: Student Info */}
+                <div className="w-full lg:w-[340px] bg-[#141822] p-4 rounded-2xl border border-neutral-800 flex flex-col justify-between shrink-0">
                   <div>
-                    {/* Header Action: Edit / Save Toggle */}
-                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-neutral-800/80">
+                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-neutral-800">
                       <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
                         Student Identity
                       </span>
@@ -1148,45 +930,33 @@ export default function App() {
                         onClick={() => setIsEditingProfile(!isEditingProfile)}
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                           isEditingProfile
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                            : 'bg-neutral-800 hover:bg-neutral-700 text-cyan-400 border border-neutral-700'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-neutral-800 text-cyan-400 border border-neutral-700'
                         }`}
                       >
-                        {isEditingProfile ? (
-                          <>
-                            <Save size={12} /> <span>Save Profile</span>
-                          </>
-                        ) : (
-                          <>
-                            <Edit3 size={12} /> <span>Edit Profile</span>
-                          </>
-                        )}
+                        {isEditingProfile ? <><Save size={12} /> Save</> : <><Edit3 size={12} /> Edit</>}
                       </button>
                     </div>
 
-                    {/* Avatar Banner */}
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-14 h-14 bg-gradient-to-br from-cyan-600 to-blue-700 rounded-2xl flex items-center justify-center font-extrabold text-lg shadow-lg border border-cyan-400/30">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-blue-700 rounded-2xl flex items-center justify-center font-extrabold text-base shadow border border-cyan-400/30">
                         {getAvatarInitials(profileData.name)}
                       </div>
                       <div className="flex-1 truncate">
-                        <span className="text-xs text-neutral-400 block">Department of <br></br>Information Security & Cloud Computing </span>
-                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                          <Check size={11} /> Lab Verified ID
-                        </span>
+                        <span className="text-xs text-neutral-400 block truncate">{profileData.college}</span>
+                        <span className="text-[10px] text-emerald-400 font-mono">● Lab Verified</span>
                       </div>
                     </div>
 
-                    {/* Field Inputs (Toggle View vs Edit) */}
-                    <div className="space-y-2.5 text-xs">
+                    <div className="space-y-2 text-xs">
                       <div>
-                        <label className="text-[10px] text-neutral-400 block mb-0.5">Full Name</label>
+                        <label className="text-[10px] text-neutral-400 block">Full Name</label>
                         {isEditingProfile ? (
                           <input
                             type="text"
                             value={profileData.name}
                             onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                            className="w-full bg-[#0d1017] px-2.5 py-1.5 rounded-lg border border-neutral-700 text-white text-xs outline-none focus:border-cyan-400"
+                            className="w-full bg-[#0d1017] px-2 py-1.5 rounded border border-neutral-700 text-white text-xs outline-none"
                           />
                         ) : (
                           <p className="font-semibold text-neutral-100 text-sm truncate">{profileData.name}</p>
@@ -1195,13 +965,13 @@ export default function App() {
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-[10px] text-neutral-400 block mb-0.5">Enrollment No.</label>
+                          <label className="text-[10px] text-neutral-400 block">Enrollment No.</label>
                           {isEditingProfile ? (
                             <input
                               type="text"
                               value={profileData.enrollment}
                               onChange={(e) => setProfileData({ ...profileData, enrollment: e.target.value })}
-                              className="w-full bg-[#0d1017] px-2.5 py-1.5 rounded-lg border border-neutral-700 text-white text-xs font-mono outline-none focus:border-cyan-400"
+                              className="w-full bg-[#0d1017] px-2 py-1.5 rounded border border-neutral-700 text-white text-xs font-mono outline-none"
                             />
                           ) : (
                             <p className="font-mono text-cyan-300 font-semibold">{profileData.enrollment}</p>
@@ -1209,13 +979,13 @@ export default function App() {
                         </div>
 
                         <div>
-                          <label className="text-[10px] text-neutral-400 block mb-0.5"> Branch / Semester</label>
+                          <label className="text-[10px] text-neutral-400 block">Branch / Sem</label>
                           {isEditingProfile ? (
                             <input
                               type="text"
                               value={profileData.branchSem}
                               onChange={(e) => setProfileData({ ...profileData, branchSem: e.target.value })}
-                              className="w-full bg-[#0d1017] px-2.5 py-1.5 rounded-lg border border-neutral-700 text-white text-xs outline-none focus:border-cyan-400"
+                              className="w-full bg-[#0d1017] px-2 py-1.5 rounded border border-neutral-700 text-white text-xs outline-none"
                             />
                           ) : (
                             <p className="text-neutral-300 truncate">{profileData.branchSem}</p>
@@ -1224,21 +994,16 @@ export default function App() {
                       </div>
 
                       <div>
-                        <label className="text-[10px] text-neutral-400 block mb-0.5">Institution</label>
-                        <p className="text-neutral-400 text-[11px] truncate">{profileData.college}</p>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] text-neutral-400 block mb-0.5">Student Bio & Focus</label>
+                        <label className="text-[10px] text-neutral-400 block">Student Bio</label>
                         {isEditingProfile ? (
                           <textarea
                             value={profileData.bio}
                             onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
                             rows={3}
-                            className="w-full bg-[#0d1017] p-2 rounded-lg border border-neutral-700 text-white text-[11px] outline-none focus:border-cyan-400 resize-none font-sans"
+                            className="w-full bg-[#0d1017] p-2 rounded border border-neutral-700 text-white text-[11px] outline-none resize-none"
                           />
                         ) : (
-                          <p className="text-[11px] text-neutral-400 leading-relaxed bg-[#0d1017] p-2 rounded-lg border border-neutral-800/80">
+                          <p className="text-[11px] text-neutral-400 bg-[#0d1017] p-2 rounded border border-neutral-800">
                             {profileData.bio}
                           </p>
                         )}
@@ -1246,112 +1011,89 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-neutral-800/80 text-[10px] text-neutral-500 font-mono flex justify-between">
+                  <div className="pt-2 border-t border-neutral-800 text-[10px] text-neutral-500 font-mono flex justify-between">
                     <span>Academic Year: 2026–27</span>
                     <span className="text-emerald-400">Status: Regular</span>
                   </div>
                 </div>
 
-                {/* Right: Lab Analytics & Practical File Log */}
-                <div className="flex-1 bg-[#141822] p-4 rounded-2xl border border-neutral-800 flex flex-col justify-between overflow-hidden">
-                  
-                  {/* Top: Analytical Quick Metric Cards */}
+                {/* Right Card: Lab Analytics & Practical Record */}
+                <div className="flex-1 bg-[#141822] p-4 rounded-2xl border border-neutral-800 flex flex-col justify-between shrink-0">
                   <div>
                     <div className="grid grid-cols-3 gap-2.5 mb-3">
-                      {/* <div className="bg-[#10141d] p-2.5 rounded-xl border border-neutral-800 flex items-center gap-2.5">
-                        <div className="p-2 bg-cyan-950/60 text-cyan-400 rounded-lg border border-cyan-800/40">
-                          <Award size={16} />
-                        </div>
+                      <div className="bg-[#10141d] p-2.5 rounded-xl border border-neutral-800 flex items-center gap-2">
+                        <Award size={16} className="text-cyan-400" />
                         <div>
-                          <span className="text-[10px] text-neutral-400 block">Lab Attendance</span>
-                          <span className="text-sm font-bold text-white">94%</span>
-                        </div> 
-                      </div> */}
-
-                      <div className="bg-[#10141d] p-2.5 rounded-xl border border-neutral-800 flex items-center gap-2.5">
-                        <div className="p-2 bg-emerald-950/60 text-emerald-400 rounded-lg border border-emerald-800/40">
-                          <CheckCircle size={16} />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-neutral-400 block">Submissions</span>
-                          <span className="text-sm font-bold text-emerald-400">4 / 5 Practicals</span>
+                          <span className="text-[9px] text-neutral-400 block">Attendance</span>
+                          <span className="text-xs font-bold text-white">94%</span>
                         </div>
                       </div>
 
-                      <div className="bg-[#10141d] p-2.5 rounded-xl border border-neutral-800 flex items-center gap-2.5">
-                        <div className="p-2 bg-purple-950/60 text-purple-400 rounded-lg border border-purple-800/40">
-                          <FileText size={16} />
-                        </div>
+                      <div className="bg-[#10141d] p-2.5 rounded-xl border border-neutral-800 flex items-center gap-2">
+                        <CheckCircle size={16} className="text-emerald-400" />
                         <div>
-                          <span className="text-[10px] text-neutral-400 block">Assessment Score</span>
-                          <span className="text-sm font-bold text-cyan-400">20 / 25 Marks</span>
+                          <span className="text-[9px] text-neutral-400 block">Practicals</span>
+                          <span className="text-xs font-bold text-emerald-400">4 / 5</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-[#10141d] p-2.5 rounded-xl border border-neutral-800 flex items-center gap-2">
+                        <FileText size={16} className="text-purple-400" />
+                        <div>
+                          <span className="text-[9px] text-neutral-400 block">Assessment</span>
+                          <span className="text-xs font-bold text-cyan-400">20 / 25</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Practical File Submission History Table */}
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-bold text-xs text-neutral-200">
-                        Official Lab Practical File Record
-                      </h3>
-                      <span className="text-[10px] text-neutral-400 font-mono">
-                        {practicalHistory.length} Registered Tasks
-                      </span>
-                    </div>
+                    <h3 className="font-bold text-xs text-neutral-200 mb-2">
+                      Official Lab Practical File Record
+                    </h3>
 
-                    <div className="space-y-1.5 overflow-y-auto max-h-[220px] pr-1 text-xs">
+                    <div className="space-y-1.5 max-h-[170px] overflow-y-auto pr-1 text-xs">
                       {practicalHistory.map((item) => (
                         <div 
                           key={item.id}
-                          className="flex items-center justify-between p-2.5 bg-[#10141d] rounded-xl border border-neutral-800/80 hover:border-neutral-700 transition"
+                          className="flex items-center justify-between p-2 bg-[#10141d] rounded-xl border border-neutral-800/80"
                         >
-                          <div className="truncate flex-1 mr-3">
-                            <span className="font-medium text-neutral-200 block truncate text-[11px]">
-                              {item.title}
-                            </span>
-                            <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-0.5">
-                              <span className="px-1.5 py-0.2 rounded bg-neutral-800 font-mono text-cyan-400">
-                                {item.lang}
-                              </span>
-                              <span className="flex items-center gap-1 font-mono">
-                                <Calendar size={10} /> {item.date}
-                              </span>
+                          <div className="truncate mr-2 flex-1">
+                            <span className="font-medium text-neutral-200 block truncate text-[11px]">{item.title}</span>
+                            <div className="flex gap-2 text-[10px] text-neutral-400">
+                              <span className="text-cyan-400">{item.lang}</span>
+                              <span>{item.date}</span>
                             </div>
                           </div>
-
-                          <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-lg whitespace-nowrap">
-                            <Check size={12} /> {item.status}
+                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-lg shrink-0">
+                            ✔ {item.status}
                           </span>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* Sign-off Banner */}
-                  <div className="pt-2 border-t border-neutral-800 flex justify-between items-center text-[10px] text-neutral-400">
-                    <span>Verified by: <strong>Prof. Sachin Sharma</strong> (Course Faculty)</span>
-                    <span className="text-emerald-400 font-mono">SVVV Lab Seal: VERIFIED</span>
+                  <div className="pt-2 border-t border-neutral-800 flex justify-between text-[10px] text-neutral-400">
+                    <span>Faculty: <strong>Dr. Sachin Sharma</strong></span>
+                    <span className="text-emerald-400">SVVV Seal: VERIFIED</span>
                   </div>
-
                 </div>
 
               </div>
 
-              {/* Bottom Action: Formatted Record Export
+              {/* PDF Download Button */}
               <button 
-                onClick={() => alert(`Practical record compiled for ${profileData.name} (${profileData.enrollment})!\nIncludes all verified practicals, timestamped compiler logs, and gradebook seals.`)}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg transition flex items-center justify-center gap-2"
+                onClick={() => alert(`Practical record compiled for ${profileData.name} (${profileData.enrollment})!`)}
+                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg transition flex items-center justify-center gap-2 shrink-0"
               >
                 <Download size={14} /> Download Formatted Practical Record (Certified PDF)
-              </button> */}
+              </button>
 
             </div>
           )}
 
         </div>
 
-        {/* BOTTOM NAVIGATION DOCK (5 TABS) */}
-        <div className="h-14 bg-[#0d1017] border-t border-neutral-800 flex justify-around items-center px-8">
+        {/* BOTTOM NAVIGATION BAR */}
+        <div className="h-14 bg-[#0d1017] border-t border-neutral-800 flex justify-around items-center px-4 shrink-0">
           {[
             { id: 'studio', label: 'CODE STUDIO', icon: Code },
             { id: 'lectures', label: 'LECTURES', icon: Video },
