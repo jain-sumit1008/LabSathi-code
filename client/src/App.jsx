@@ -8,15 +8,16 @@ import {
 import Editor from '@monaco-editor/react';
 import io from 'socket.io-client';
 
-// YOUR EXACT LAPTOP IPv4 ADDRESS (Directly used without broken localhost check)
+// YOUR EXACT LAPTOP IPv4 ADDRESS
 const BACKEND_URL = 'http://192.168.29.127:5000';
 
 const socket = io(BACKEND_URL, {
   transports: ['polling', 'websocket'],
   reconnection: true,
-  reconnectionAttempts: 20,
+  reconnectionAttempts: 50,
   reconnectionDelay: 1000,
-  timeout: 20000
+  timeout: 30000,
+  forceNew: true
 });
 
 const TEMPLATES = {
@@ -205,8 +206,20 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    socket.on('connect', () => setIsConnected(true));
-    socket.on('disconnect', () => setIsConnected(false));
+    socket.on('connect', () => {
+      console.log('Connected to backend:', socket.id);
+      setIsConnected(true);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.log('Socket connect error:', err.message);
+      setIsConnected(false);
+    });
+
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+    });
+
     socket.emit('join_lab', 'general');
 
     socket.on('terminal_data', (chunk) => {
@@ -223,6 +236,7 @@ export default function App() {
 
     return () => {
       socket.off('connect');
+      socket.off('connect_error');
       socket.off('disconnect');
       socket.off('terminal_data');
       socket.off('receive_chat_message');
