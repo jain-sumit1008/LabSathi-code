@@ -7,13 +7,12 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 
-// YOUR EXACT LAPTOP IPv4 ADDRESS
 const BACKEND_URL = 'http://192.168.29.127:5000';
 
 const socket = io(BACKEND_URL, {
   transports: ['polling', 'websocket'],
   reconnection: true,
-  reconnectionAttempts: 100,
+  reconnectionAttempts: 50,
   reconnectionDelay: 1000,
   timeout: 30000,
   forceNew: true
@@ -233,7 +232,7 @@ export default function App() {
 
     socket.on('receive_chat_message', (msg) => {
       const targetRoom = msg.channel || 'python-queries';
-      setChannelMessages(prev => ({
+      setChannelMessages((prev) => ({
         ...prev,
         [targetRoom]: [...(prev[targetRoom] || []), msg]
       }));
@@ -272,72 +271,42 @@ export default function App() {
       return;
     }
 
-    // 2. High-reliability Cloud Runner: Piston Engine API
+    // 2. High-reliability Cloud Runner: Judge0 CE API
     setTerminalOutput((prev) => prev + "Laptop offline or network changed. Routing through LabSathi Cloud Engine...\n");
     try {
-      let pistonLang = 'python';
-      let pistonVersion = '3.10.0';
+      // Judge0 Language IDs: Python (71), C++ GCC 13 (54), Java (62)
+      let langId = 71;
+      if (language === 'cpp') langId = 54;
+      if (language === 'java') langId = 62;
 
-      if (language === 'cpp') {
-        pistonLang = 'cpp';
-        pistonVersion = '10.2.0';
-      } else if (language === 'java') {
-        pistonLang = 'java';
-        pistonVersion = '15.0.2';
-      }
-
-      // Safe sanitization for Java class declaration
       let cleanCode = code;
       if (language === 'java') {
         cleanCode = cleanCode.replace(/public\s+class\s+Main/, 'class Main');
       }
 
-      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+      const res = await fetch('https://ce.judge0.com/submissions?base64_encoded=false&wait=true', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          language: pistonLang,
-          version: pistonVersion,
-          files: [{ content: cleanCode }],
+          source_code: cleanCode,
+          language_id: langId,
           stdin: terminalInputVal || ''
         })
       });
 
       const data = await res.json();
-      if (data.run) {
-        const out = data.run.stdout || data.run.stderr || data.run.output || 'Execution completed without output.';
-        setTerminalOutput((prev) => prev + out + '\n[Process completed]\n');
-      } else if (data.compile && data.compile.stderr) {
-        setTerminalOutput((prev) => prev + `Compilation Error:\n${data.compile.stderr}\n[Compilation failed]\n`);
+      const stdout = data.stdout || '';
+      const stderr = data.stderr || data.compile_output || '';
+      
+      if (stderr) {
+        setTerminalOutput((prev) => prev + stderr + '\n[Process exited with error]\n');
+      } else if (stdout) {
+        setTerminalOutput((prev) => prev + stdout + '\n[Process completed]\n');
       } else {
-        setTerminalOutput((prev) => prev + (data.message || 'Error executing program') + '\n');
+        setTerminalOutput((prev) => prev + (data.status?.description || 'Program executed with no output.') + '\n[Process completed]\n');
       }
     } catch (err) {
-      // 3. Wandbox secondary fallback
-      try {
-        let wbCompiler = 'cpython-head';
-        if (language === 'cpp') wbCompiler = 'gcc-head';
-        if (language === 'java') wbCompiler = 'openjdk-jdk-21+35';
-
-        let wbCode = code;
-        if (language === 'java') wbCode = wbCode.replace(/public\s+class\s+Main/, 'class Main');
-
-        const wbRes = await fetch('https://wandbox.org/api/compile.json', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            compiler: wbCompiler,
-            code: wbCode,
-            stdin: terminalInputVal || ''
-          })
-        });
-
-        const wbData = await wbRes.json();
-        const output = wbData.program_output || wbData.compiler_error || wbData.program_error || 'Execution finished.';
-        setTerminalOutput((prev) => prev + output + '\n[Process completed]\n');
-      } catch (innerErr) {
-        setTerminalOutput((prev) => prev + `Execution Error: ${err.message}\nPlease verify internet connectivity.\n`);
-      }
+      setTerminalOutput((prev) => prev + `Execution Error: ${err.message}\nPlease verify internet connection.\n`);
     } finally {
       setIsRunning(false);
     }
@@ -379,7 +348,7 @@ export default function App() {
   const calculateProgress = () => {
     if (!course || !course.modules) return 0;
     let total = 0, completed = 0;
-    course.modules.forEach(m => m.lectures.forEach(l => { 
+    course.modules.forEach((m) => m.lectures.forEach((l) => { 
       total++; 
       if (l.isCompleted) completed++; 
     }));
@@ -387,15 +356,15 @@ export default function App() {
   };
 
   const handleToggleComplete = (lectureId) => {
-    const updatedModules = course.modules.map(mod => ({
+    const updatedModules = course.modules.map((mod) => ({
       ...mod,
-      lectures: mod.lectures.map(lec => 
+      lectures: mod.lectures.map((lec) => 
         lec.id === lectureId ? { ...lec, isCompleted: !lec.isCompleted } : lec
       )
     }));
     setCourse({ ...course, modules: updatedModules });
     if (activeLecture?.id === lectureId) {
-      setActiveLecture(prev => ({ ...prev, isCompleted: !prev.isCompleted }));
+      setActiveLecture((prev) => ({ ...prev, isCompleted: !prev.isCompleted }));
     }
   };
 
@@ -406,11 +375,11 @@ export default function App() {
   };
 
   const handleToggleTodo = (id) => {
-    setTodos(todos.map(t => t.id === id ? { ...t, done: !t.done } : t));
+    setTodos(todos.map((t) => t.id === id ? { ...t, done: !t.done } : t));
   };
 
   const handleDeleteTodo = (id) => {
-    setTodos(todos.filter(t => t.id !== id));
+    setTodos(todos.filter((t) => t.id !== id));
   };
 
   const calculateQuizScore = () => {
@@ -440,7 +409,7 @@ export default function App() {
     };
 
     if (activeChannel === 'ai-assistant') {
-      setChannelMessages(prev => ({
+      setChannelMessages((prev) => ({
         ...prev,
         'ai-assistant': [...(prev['ai-assistant'] || []), userMessage]
       }));
@@ -518,7 +487,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Robust Line-Numbered Mobile Editor */}
+                {/* Line-Numbered Mobile Text Editor */}
                 <div className="flex-1 w-full bg-[#0b0e14] p-2 flex overflow-hidden font-mono text-xs">
                   <div className="w-8 text-neutral-600 select-none text-right pr-2 pt-1 font-mono text-[11px] border-r border-neutral-800/80">
                     {code.split('\n').map((_, i) => (
@@ -679,7 +648,7 @@ export default function App() {
                 <div className="flex flex-col pt-2 border-t border-neutral-800">
                   <span className="text-xs font-bold text-neutral-300 mb-1.5">Tasks / To-Do List</span>
                   <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1 text-xs">
-                    {todos.map(todo => (
+                    {todos.map((todo) => (
                       <div 
                         key={todo.id} 
                         className="flex items-center justify-between p-1.5 rounded bg-[#181d2a] hover:bg-neutral-800 transition"
@@ -731,7 +700,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3: QUIZ & ASSESSMENT (All Options Available) */}
+          {/* TAB 3: QUIZ & ASSESSMENT */}
           {activeTab === 'quiz' && (
             <div className="h-full p-3 lg:p-4 flex flex-col lg:flex-row gap-3 lg:gap-4 bg-[#0d1017] overflow-y-auto pb-24 lg:pb-4">
               <div className="w-full lg:w-64 bg-[#141822] rounded-2xl p-4 border border-neutral-800 flex flex-col justify-between shrink-0">
